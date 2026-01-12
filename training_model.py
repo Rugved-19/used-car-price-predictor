@@ -1,6 +1,5 @@
 import os
 import pandas as pd
-import numpy as np
 import joblib
 
 from sklearn.preprocessing import StandardScaler
@@ -11,28 +10,37 @@ MODEL_DIR = "model"
 
 
 def train_and_save_model():
+    # =========================
+    # SETUP
+    # =========================
     os.makedirs(MODEL_DIR, exist_ok=True)
     df = pd.read_csv(DATA_PATH)
 
     # =========================
-    # CLEAN PRICE (🔥 FIX)
+    # CLEAN PRICE (🔥 CRITICAL FIX)
     # =========================
     df["Price"] = (
         df["Price"]
         .astype(str)
-        .str.replace("Lakh", "", regex=False)
         .str.replace("Lakhs", "", regex=False)
+        .str.replace("Lakh", "", regex=False)
         .str.strip()
     )
     df["Price"] = pd.to_numeric(df["Price"], errors="coerce")
     df = df.dropna(subset=["Price"])
 
     # =========================
-    # CLEAN NUMERIC COLUMNS
+    # CLEAN NUMERIC FEATURES
     # =========================
-    df["Mileage"] = df["Mileage"].astype(str).str.extract(r"(\d+\.?\d*)").astype(float)
-    df["Engine"] = df["Engine"].astype(str).str.extract(r"(\d+)").astype(float)
-    df["Power"] = df["Power"].astype(str).str.extract(r"(\d+\.?\d*)").astype(float)
+    df["Mileage"] = (
+        df["Mileage"].astype(str).str.extract(r"(\d+\.?\d*)").astype(float)
+    )
+    df["Engine"] = (
+        df["Engine"].astype(str).str.extract(r"(\d+)").astype(float)
+    )
+    df["Power"] = (
+        df["Power"].astype(str).str.extract(r"(\d+\.?\d*)").astype(float)
+    )
 
     df.fillna(df.median(numeric_only=True), inplace=True)
 
@@ -40,8 +48,11 @@ def train_and_save_model():
     # FEATURE ENGINEERING
     # =========================
     df["Manufacturer"] = df["Name"].str.split().str[0]
+
+    # Drop raw text columns
     df.drop(["Name", "Location"], axis=1, inplace=True, errors="ignore")
 
+    # Convert Year → Car Age
     CURRENT_YEAR = 2026
     df["Year"] = CURRENT_YEAR - df["Year"]
 
@@ -60,17 +71,18 @@ def train_and_save_model():
     X = df.drop("Price", axis=1)
     y = df["Price"]
 
+    # 🔒 FINAL SAFETY CONVERSION
     X = X.apply(pd.to_numeric, errors="coerce")
     X.fillna(0, inplace=True)
 
     # =========================
-    # SCALE
+    # SCALE FEATURES
     # =========================
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
 
     # =========================
-    # MODEL
+    # TRAIN MODEL
     # =========================
     model = RandomForestRegressor(
         n_estimators=200,
@@ -82,14 +94,10 @@ def train_and_save_model():
     model.fit(X_scaled, y)
 
     # =========================
-    # SAVE
+    # SAVE ARTIFACTS
     # =========================
-    joblib.dump(model, f"{MODEL_DIR}/car_price_model.pkl")
-    joblib.dump(scaler, f"{MODEL_DIR}/scaler.pkl")
-    joblib.dump(X.columns.tolist(), f"{MODEL_DIR}/features.pkl")
+    joblib.dump(model, os.path.join(MODEL_DIR, "car_price_model.pkl"))
+    joblib.dump(scaler, os.path.join(MODEL_DIR, "scaler.pkl"))
+    joblib.dump(X.columns.tolist(), os.path.join(MODEL_DIR, "features.pkl"))
 
     return model, scaler, X.columns.tolist()
-
-
-if __name__ == "__main__":
-    train_and_save_model()
