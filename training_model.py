@@ -1,63 +1,95 @@
-# train_model.py
 import os
 import pandas as pd
 import numpy as np
 import joblib
 
-from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import RandomForestRegressor
 
 DATA_PATH = "data/dataset.csv"
 MODEL_DIR = "model"
 
-def train_and_save_model():
-    os.makedirs(MODEL_DIR, exist_ok=True)
 
+def train_and_save_model():
+    # =========================
+    # SETUP
+    # =========================
+    os.makedirs(MODEL_DIR, exist_ok=True)
     df = pd.read_csv(DATA_PATH)
 
-    # ----- CLEAN DATA (KEEP SIMPLE & SAFE) -----
+    # =========================
+    # BASIC CLEANING
+    # =========================
     df = df.dropna(subset=["Price"])
 
-    df["Mileage"] = df["Mileage"].astype(str).str.extract(r"(\d+\.?\d*)").astype(float)
-    df["Engine"] = df["Engine"].astype(str).str.extract(r"(\d+)").astype(float)
-    df["Power"] = df["Power"].astype(str).str.extract(r"(\d+\.?\d*)").astype(float)
+    df["Mileage"] = (
+        df["Mileage"].astype(str).str.extract(r"(\d+\.?\d*)").astype(float)
+    )
+    df["Engine"] = (
+        df["Engine"].astype(str).str.extract(r"(\d+)").astype(float)
+    )
+    df["Power"] = (
+        df["Power"].astype(str).str.extract(r"(\d+\.?\d*)").astype(float)
+    )
 
+    # Fill numeric NaNs
     df.fillna(df.median(numeric_only=True), inplace=True)
 
-    # Manufacturer
+    # =========================
+    # FEATURE ENGINEERING
+    # =========================
     df["Manufacturer"] = df["Name"].str.split().str[0]
 
-    df.drop(["Name", "Location"], axis=1, inplace=True)
+    # Drop text columns
+    df.drop(["Name", "Location"], axis=1, inplace=True, errors="ignore")
 
-    # Car age
-    current_year = 2026
-    df["Year"] = current_year - df["Year"]
+    # Convert year → car age
+    CURRENT_YEAR = 2026
+    df["Year"] = CURRENT_YEAR - df["Year"]
 
-    # One-hot encode
+    # =========================
+    # ONE-HOT ENCODING
+    # =========================
     df = pd.get_dummies(
         df,
         columns=["Manufacturer", "Fuel_Type", "Transmission", "Owner_Type"],
         drop_first=True
     )
 
+    # =========================
+    # SPLIT FEATURES / TARGET
+    # =========================
     X = df.drop("Price", axis=1)
     y = df["Price"]
 
+    # 🔒 FINAL SAFETY CONVERSION
+    X = X.apply(pd.to_numeric, errors="coerce")
+    X.fillna(0, inplace=True)
+
+    # =========================
+    # SCALE FEATURES
+    # =========================
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
 
+    # =========================
+    # MODEL
+    # =========================
     model = RandomForestRegressor(
         n_estimators=200,
         max_depth=15,
         random_state=42,
         n_jobs=-1
     )
+
     model.fit(X_scaled, y)
 
-    joblib.dump(model, f"{MODEL_DIR}/car_price_model.pkl")
-    joblib.dump(scaler, f"{MODEL_DIR}/scaler.pkl")
-    joblib.dump(X.columns.tolist(), f"{MODEL_DIR}/features.pkl")
+    # =========================
+    # SAVE ARTIFACTS
+    # =========================
+    joblib.dump(model, os.path.join(MODEL_DIR, "car_price_model.pkl"))
+    joblib.dump(scaler, os.path.join(MODEL_DIR, "scaler.pkl"))
+    joblib.dump(X.columns.tolist(), os.path.join(MODEL_DIR, "features.pkl"))
 
     return model, scaler, X.columns.tolist()
 
