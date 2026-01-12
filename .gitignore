@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.pyc
+
+# Virtual environment
+venv/
+
+# ML artifacts
+model/
+*.pkl
+*.joblib
+
+# Runtime data
+data/seller_listings.csv
