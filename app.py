@@ -6,10 +6,12 @@ import joblib
 import time
 import os
 import plotly.express as px
-import subprocess
+
+# 🔥 IMPORT TRAINING FUNCTION (NO SUBPROCESS)
+from train_model import train_and_save_model
 
 # =========================
-# PATHS (RELATIVE – CLOUD SAFE)
+# PATHS (CLOUD SAFE)
 # =========================
 MODEL_PATH = "model/car_price_model.pkl"
 SCALER_PATH = "model/scaler.pkl"
@@ -18,21 +20,18 @@ DATA_PATH = "data/dataset.csv"
 SELLER_DB = "data/seller_listings.csv"
 
 # =========================
-# AUTO TRAIN MODEL (RUN ONCE)
+# LOAD OR TRAIN MODEL (ONCE)
 # =========================
 @st.cache_resource
 def load_or_train_model():
     if not os.path.exists(MODEL_PATH):
-        os.makedirs("model", exist_ok=True)
-        with st.spinner("Training model for the first time..."):
-            subprocess.run(
-                ["python", "train_model.py"],
-                check=True
-            )
+        with st.spinner("🚀 Training model for first deployment..."):
+            model, scaler, feature_columns = train_and_save_model()
+    else:
+        model = joblib.load(MODEL_PATH)
+        scaler = joblib.load(SCALER_PATH)
+        feature_columns = joblib.load(FEATURES_PATH)
 
-    model = joblib.load(MODEL_PATH)
-    scaler = joblib.load(SCALER_PATH)
-    feature_columns = joblib.load(FEATURES_PATH)
     return model, scaler, feature_columns
 
 
@@ -149,10 +148,7 @@ if st.button("💰 Predict Price"):
     with st.spinner("Calculating best market price..."):
         time.sleep(1.5)
 
-    preds = np.array(
-        [tree.predict(input_scaled)[0] for tree in model.estimators_]
-    )
-
+    preds = np.array([tree.predict(input_scaled)[0] for tree in model.estimators_])
     mean_price = preds.mean()
     low, high = np.percentile(preds, [10, 90])
 
@@ -192,12 +188,12 @@ if st.button("💰 Predict Price"):
     # =========================
     st.subheader("📈 Market Price vs Kilometers")
 
-    sample_df = df[["Kilometers_Driven", "Price"]].dropna()
-    if len(sample_df) > 500:
-        sample_df = sample_df.sample(500)
+    plot_df = df[["Kilometers_Driven", "Price"]].dropna()
+    if len(plot_df) > 500:
+        plot_df = plot_df.sample(500)
 
     fig = px.scatter(
-        sample_df,
+        plot_df,
         x="Kilometers_Driven",
         y="Price",
         opacity=0.45,
