@@ -8,7 +8,7 @@ import os
 import plotly.express as px
 
 # 🔥 IMPORT TRAINING FUNCTION (NO SUBPROCESS)
-from train_model import train_and_save_model
+from training_model import train_and_save_model
 
 # =========================
 # PATHS (CLOUD SAFE)
