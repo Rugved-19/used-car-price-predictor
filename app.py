@@ -7,56 +7,75 @@ import time
 import os
 import plotly.express as px
 import subprocess
-# =========================
-# PATHS
-# =========================
-MODEL_PATH = r"E:\Car-Price-Prediction-master 2\model\car_price_model.pkl"#The file should be put by when the model is train 
-SCALER_PATH = r"E:\Car-Price-Prediction-master 2\model\scaler.pkl"#The file should be put by when the model is train 
-FEATURES_PATH = r"E:\Car-Price-Prediction-master 2\model\features.pkl"#The file should be put by when the model is train 
-DATA_PATH = r"E:\used_car_app\data\dataset.csv"
-SELLER_DB = r"E:\used_car_app\data\seller_listings.csv"
 
 # =========================
-# LOAD ARTIFACTS
+# PATHS (RELATIVE – CLOUD SAFE)
 # =========================
-model = joblib.load(MODEL_PATH)
-scaler = joblib.load(SCALER_PATH)
-feature_columns = joblib.load(FEATURES_PATH)
+MODEL_PATH = "model/car_price_model.pkl"
+SCALER_PATH = "model/scaler.pkl"
+FEATURES_PATH = "model/features.pkl"
+DATA_PATH = "data/dataset.csv"
+SELLER_DB = "data/seller_listings.csv"
+
+# =========================
+# AUTO TRAIN MODEL (RUN ONCE)
+# =========================
+@st.cache_resource
+def load_or_train_model():
+    if not os.path.exists(MODEL_PATH):
+        os.makedirs("model", exist_ok=True)
+        with st.spinner("Training model for the first time..."):
+            subprocess.run(
+                ["python", "train_model.py"],
+                check=True
+            )
+
+    model = joblib.load(MODEL_PATH)
+    scaler = joblib.load(SCALER_PATH)
+    feature_columns = joblib.load(FEATURES_PATH)
+    return model, scaler, feature_columns
+
+
+model, scaler, feature_columns = load_or_train_model()
 df = pd.read_csv(DATA_PATH)
+
+# =========================
+# PAGE CONFIG
+# =========================
+st.set_page_config(
+    page_title="Smart Used Car Pricing",
+    layout="centered"
+)
 
 # =========================
 # THEME TOGGLE
 # =========================
 theme = st.sidebar.toggle("🌗 Dark / Light Mode", value=True)
 
-if theme:
-    bg = "#0f2027"
-    card = "#1e293b"
-    text = "white"
-else:
-    bg = "#f8fafc"
-    card = "#ffffff"
-    text = "#111827"
+bg = "#0f2027" if theme else "#f8fafc"
+card = "#1e293b" if theme else "#ffffff"
+text = "white" if theme else "#111827"
 
-st.markdown(f"""
-<style>
-body {{
-    background-color: {bg};
-}}
-.card {{
-    background-color: {card};
-    padding: 22px;
-    border-radius: 16px;
-    color: {text};
-    box-shadow: 0px 12px 30px rgba(0,0,0,0.25);
-}}
-.price {{
-    font-size: 28px;
-    font-weight: bold;
-    text-align: center;
-}}
-</style>
-""", unsafe_allow_html=True)
+st.markdown(
+    f"""
+    <style>
+    body {{ background-color: {bg}; }}
+    .card {{
+        background-color: {card};
+        padding: 22px;
+        border-radius: 16px;
+        color: {text};
+        box-shadow: 0px 12px 30px rgba(0,0,0,0.25);
+    }}
+    .price {{
+        font-size: 28px;
+        font-weight: bold;
+        text-align: center;
+    }}
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 
 # =========================
 # TITLE
@@ -65,17 +84,14 @@ st.markdown("<h1 style='text-align:center'>🚗 Smart Used Car Pricing</h1>", un
 st.caption("AI-powered realistic car valuation")
 
 # =========================
-# CAR NAME AUTOCOMPLETE
+# INPUTS
 # =========================
 car_names = sorted(df["Name"].dropna().unique().tolist())
 
-# =========================
-# INPUT CARD
-# =========================
 st.markdown("<div class='card'>", unsafe_allow_html=True)
 
 name = st.selectbox("Car Name", car_names)
-year = st.number_input("Manufacturing Year", 1995, 2025, 2016)
+year = st.number_input("Manufacturing Year", 1995, datetime.datetime.now().year, 2016)
 kms = st.number_input("Kilometers Driven", 0, 500000, 45000)
 
 fuel = st.selectbox("Fuel Type", ["Petrol", "Diesel", "CNG", "Electric"])
@@ -94,7 +110,7 @@ st.markdown("</div><br>", unsafe_allow_html=True)
 # =========================
 current_year = datetime.datetime.now().year
 car_age = current_year - year
-manufacturer = name.split()[0]
+manufacturer = name.split()[0] if name else "Unknown"
 
 base = {
     "Year": car_age,
@@ -126,23 +142,31 @@ input_scaled = scaler.transform(input_df)
 if st.button("💰 Predict Price"):
 
     st.image(
-        "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExM2Z0cXQ2YWl3dmp5M3ZxZWp5ZTBxNHV2Y2F6aHB6Y2g3eTB3a3BzYyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/26ufdipQqU2lhNA4g/giphy.gif",
-        width=300
+        "https://media.giphy.com/media/26ufdipQqU2lhNA4g/giphy.gif",
+        width=280
     )
 
-    with st.spinner("Calculating best price..."):
-        time.sleep(1.8)
+    with st.spinner("Calculating best market price..."):
+        time.sleep(1.5)
 
-    preds = np.array([tree.predict(input_scaled)[0] for tree in model.estimators_])
+    preds = np.array(
+        [tree.predict(input_scaled)[0] for tree in model.estimators_]
+    )
+
     mean_price = preds.mean()
     low, high = np.percentile(preds, [10, 90])
 
-    st.markdown(f"""
-    <div class='card'>
-        <div class='price'>₹ {mean_price:.2f} Lakhs</div>
-        <p style='text-align:center'>Expected Range: ₹ {low:.2f} – ₹ {high:.2f} Lakhs</p>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown(
+        f"""
+        <div class='card'>
+            <div class='price'>₹ {mean_price:.2f} Lakhs</div>
+            <p style='text-align:center'>
+            Expected Range: ₹ {low:.2f} – ₹ {high:.2f} Lakhs
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
     # =========================
     # SAVE SELLER DATA
@@ -150,10 +174,12 @@ if st.button("💰 Predict Price"):
     record = {
         "Car": name,
         "Year": year,
-        "KM": kms,
+        "Kilometers": kms,
         "Predicted_Price": round(mean_price, 2),
         "Date": datetime.datetime.now()
     }
+
+    os.makedirs("data", exist_ok=True)
 
     if os.path.exists(SELLER_DB):
         old = pd.read_csv(SELLER_DB)
@@ -166,15 +192,26 @@ if st.button("💰 Predict Price"):
     # =========================
     st.subheader("📈 Market Price vs Kilometers")
 
-    plot_df = df[["Kilometers_Driven", "Price"]].dropna().sample(500)
+    sample_df = df[["Kilometers_Driven", "Price"]].dropna()
+    if len(sample_df) > 500:
+        sample_df = sample_df.sample(500)
+
     fig = px.scatter(
-        plot_df,
+        sample_df,
         x="Kilometers_Driven",
         y="Price",
-        opacity=0.4,
+        opacity=0.45,
         title="Used Car Market Trend"
     )
-    fig.add_scatter(x=[kms], y=[mean_price], mode="markers", marker=dict(size=14, color="red"))
+
+    fig.add_scatter(
+        x=[kms],
+        y=[mean_price],
+        mode="markers",
+        marker=dict(size=14, color="red"),
+        name="Your Car"
+    )
+
     st.plotly_chart(fig, use_container_width=True)
 
 # =========================
