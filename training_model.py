@@ -11,39 +11,37 @@ MODEL_DIR = "model"
 
 
 def train_and_save_model():
-    # =========================
-    # SETUP
-    # =========================
     os.makedirs(MODEL_DIR, exist_ok=True)
     df = pd.read_csv(DATA_PATH)
 
     # =========================
-    # BASIC CLEANING
+    # CLEAN PRICE (🔥 FIX)
     # =========================
+    df["Price"] = (
+        df["Price"]
+        .astype(str)
+        .str.replace("Lakh", "", regex=False)
+        .str.replace("Lakhs", "", regex=False)
+        .str.strip()
+    )
+    df["Price"] = pd.to_numeric(df["Price"], errors="coerce")
     df = df.dropna(subset=["Price"])
 
-    df["Mileage"] = (
-        df["Mileage"].astype(str).str.extract(r"(\d+\.?\d*)").astype(float)
-    )
-    df["Engine"] = (
-        df["Engine"].astype(str).str.extract(r"(\d+)").astype(float)
-    )
-    df["Power"] = (
-        df["Power"].astype(str).str.extract(r"(\d+\.?\d*)").astype(float)
-    )
+    # =========================
+    # CLEAN NUMERIC COLUMNS
+    # =========================
+    df["Mileage"] = df["Mileage"].astype(str).str.extract(r"(\d+\.?\d*)").astype(float)
+    df["Engine"] = df["Engine"].astype(str).str.extract(r"(\d+)").astype(float)
+    df["Power"] = df["Power"].astype(str).str.extract(r"(\d+\.?\d*)").astype(float)
 
-    # Fill numeric NaNs
     df.fillna(df.median(numeric_only=True), inplace=True)
 
     # =========================
     # FEATURE ENGINEERING
     # =========================
     df["Manufacturer"] = df["Name"].str.split().str[0]
-
-    # Drop text columns
     df.drop(["Name", "Location"], axis=1, inplace=True, errors="ignore")
 
-    # Convert year → car age
     CURRENT_YEAR = 2026
     df["Year"] = CURRENT_YEAR - df["Year"]
 
@@ -62,12 +60,11 @@ def train_and_save_model():
     X = df.drop("Price", axis=1)
     y = df["Price"]
 
-    # 🔒 FINAL SAFETY CONVERSION
     X = X.apply(pd.to_numeric, errors="coerce")
     X.fillna(0, inplace=True)
 
     # =========================
-    # SCALE FEATURES
+    # SCALE
     # =========================
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
@@ -85,11 +82,11 @@ def train_and_save_model():
     model.fit(X_scaled, y)
 
     # =========================
-    # SAVE ARTIFACTS
+    # SAVE
     # =========================
-    joblib.dump(model, os.path.join(MODEL_DIR, "car_price_model.pkl"))
-    joblib.dump(scaler, os.path.join(MODEL_DIR, "scaler.pkl"))
-    joblib.dump(X.columns.tolist(), os.path.join(MODEL_DIR, "features.pkl"))
+    joblib.dump(model, f"{MODEL_DIR}/car_price_model.pkl")
+    joblib.dump(scaler, f"{MODEL_DIR}/scaler.pkl")
+    joblib.dump(X.columns.tolist(), f"{MODEL_DIR}/features.pkl")
 
     return model, scaler, X.columns.tolist()
 
